@@ -59,14 +59,14 @@ patches:
 #replacements:
 # - source: # Uncomment the following block to enable certificates for metrics
 #     kind: Service
-#     version: v1
+#     version: v1alpha1
 #     name: controller-manager-metrics-service
 #     fieldPath: metadata.name
 #   targets:
 #     - select:
 #         kind: Certificate
 #         group: cert-manager.io
-#         version: v1
+#         version: v1alpha1
 #         name: metrics-certs
 #       fieldPaths:
 #         - spec.dnsNames.0
@@ -78,7 +78,7 @@ patches:
 #     - select: # Uncomment the following to set the Service name for TLS config in Prometheus ServiceMonitor
 #         kind: ServiceMonitor
 #         group: monitoring.coreos.com
-#         version: v1
+#         version: v1alpha1
 #         name: controller-manager-metrics-monitor
 #       fieldPaths:
 #         - spec.endpoints.0.tlsConfig.serverName
@@ -89,14 +89,14 @@ patches:
 #
 # - source:
 #     kind: Service
-#     version: v1
+#     version: v1alpha1
 #     name: controller-manager-metrics-service
 #     fieldPath: metadata.namespace
 #   targets:
 #     - select:
 #         kind: Certificate
 #         group: cert-manager.io
-#         version: v1
+#         version: v1alpha1
 #         name: metrics-certs
 #       fieldPaths:
 #         - spec.dnsNames.0
@@ -108,7 +108,7 @@ patches:
 #     - select: # Uncomment the following to set the Service namespace for TLS in Prometheus ServiceMonitor
 #         kind: ServiceMonitor
 #         group: monitoring.coreos.com
-#         version: v1
+#         version: v1alpha1
 #         name: controller-manager-metrics-monitor
 #       fieldPaths:
 #         - spec.endpoints.0.tlsConfig.serverName
@@ -119,14 +119,14 @@ patches:
 #
 # - source: # Uncomment the following block if you have any webhook
 #     kind: Service
-#     version: v1
+#     version: v1alpha1
 #     name: webhook-service
 #     fieldPath: .metadata.name # Name of the service
 #   targets:
 #     - select:
 #         kind: Certificate
 #         group: cert-manager.io
-#         version: v1
+#         version: v1alpha1
 #         name: serving-cert
 #       fieldPaths:
 #         - .spec.dnsNames.0
@@ -137,14 +137,14 @@ patches:
 #         create: true
 # - source:
 #     kind: Service
-#     version: v1
+#     version: v1alpha1
 #     name: webhook-service
 #     fieldPath: .metadata.namespace # Namespace of the service
 #   targets:
 #     - select:
 #         kind: Certificate
 #         group: cert-manager.io
-#         version: v1
+#         version: v1alpha1
 #         name: serving-cert
 #       fieldPaths:
 #         - .spec.dnsNames.0
@@ -157,7 +157,7 @@ patches:
 # - source: # Uncomment the following block if you have a ValidatingWebhook (--programmatic-validation)
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert # This name should match the one in certificate.yaml
 #     fieldPath: .metadata.namespace # Namespace of the certificate CR
 #   targets:
@@ -172,7 +172,7 @@ patches:
 # - source:
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert
 #     fieldPath: .metadata.name
 #   targets:
@@ -188,7 +188,7 @@ patches:
 # - source: # Uncomment the following block if you have a DefaultingWebhook (--defaulting )
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert
 #     fieldPath: .metadata.namespace # Namespace of the certificate CR
 #   targets:
@@ -203,7 +203,7 @@ patches:
 # - source:
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert
 #     fieldPath: .metadata.name
 #   targets:
@@ -219,7 +219,7 @@ patches:
 # - source: # Uncomment the following block if you have a ConversionWebhook (--conversion)
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert
 #     fieldPath: .metadata.namespace # Namespace of the certificate CR
 #   targets: # Do not remove or uncomment the following scaffold marker; required to generate code for target CRD.
@@ -227,7 +227,7 @@ patches:
 # - source:
 #     kind: Certificate
 #     group: cert-manager.io
-#     version: v1
+#     version: v1alpha1
 #     name: serving-cert
 #     fieldPath: .metadata.name
 #   targets: # Do not remove or uncomment the following scaffold marker; required to generate code for target CRD.

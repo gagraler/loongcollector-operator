@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	infraflowv1 "github.com/gagraler/loongcollector-operator/api/v1"
+	infraflowv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

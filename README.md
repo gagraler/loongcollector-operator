@@ -50,7 +50,7 @@ kubectl apply -f config/samples/config-server-config.yaml
 创建一个示例 Pipeline：
 
 ```yaml
-apiVersion: infraflow.co/v1
+apiVersion: infraflow.co/v1alpha1
 kind: Pipeline
 metadata:
   name: sample-pipeline
@@ -88,7 +88,7 @@ Pipeline CRD 定义了以下字段：
 可以通过 ConfigMap 配置 Config-Server 地址：
 
 ```yaml
-apiVersion: v1
+apiVersion: v1alpha1
 kind: ConfigMap
 metadata:
   name: config-server-config

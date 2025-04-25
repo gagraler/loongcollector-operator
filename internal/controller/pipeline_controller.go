@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
+	apiv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
 )
 
 // PipelineReconciler reconciles a Pipeline object

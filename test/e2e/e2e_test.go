@@ -274,7 +274,7 @@ var _ = Describe("Manager", Ordered, func() {
 // and parsing the resulting token from the API response.
 func serviceAccountToken() (string, error) {
 	const tokenRequestRawString = `{
-		"apiVersion": "authentication.k8s.io/v1",
+		"apiVersion": "authentication.k8s.io/v1alpha1",
 		"kind": "TokenRequest"
 	}`
 
@@ -290,7 +290,7 @@ func serviceAccountToken() (string, error) {
 	verifyTokenCreation := func(g Gomega) {
 		// Execute kubectl command to create the token
 		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
-			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
+			"/api/v1alpha1/namespaces/%s/serviceaccounts/%s/token",
 			namespace,
 			serviceAccountName,
 		), "-f", tokenRequestFile)

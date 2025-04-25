@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
+	apiv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
 	"gopkg.in/yaml.v3"
 )
 
