@@ -26,7 +26,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
+	"github.com/gagraler/loongcollector-operator/api/v1alpha1"
 	"github.com/gagraler/loongcollector-operator/internal/controller"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,7 +49,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(apiv1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

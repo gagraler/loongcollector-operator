@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
+	"github.com/gagraler/loongcollector-operator/api/v1alpha1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,7 +30,7 @@ func NewAgentClient(baseURL string) *AgentClient {
 }
 
 // ApplyPipelineToAgent applies a pipeline configuration to the agent
-func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *apiv1.Pipeline) error {
+func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	var config map[string]interface{}
 	if err := yaml.Unmarshal([]byte(pipeline.Spec.Content), &config); err != nil {
 		return fmt.Errorf("failed to parse YAML config: %v", err)
@@ -87,7 +87,7 @@ func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *apiv1.
 }
 
 // DeletePipelineToAgent 从Config-Server删除Pipeline配置
-func (a *AgentClient) DeletePipelineToAgent(ctx context.Context, pipeline *apiv1.Pipeline) error {
+func (a *AgentClient) DeletePipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	req, err := http.NewRequestWithContext(ctx, "DELETE",
 		fmt.Sprintf("%s/User/DeleteConfig/%s", a.baseURL, pipeline.Spec.Name), nil)
 	if err != nil {

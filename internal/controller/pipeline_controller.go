@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1alpha1"
+	"github.com/gagraler/loongcollector-operator/api/v1alpha1"
 )
 
 // PipelineReconciler reconciles a Pipeline object
@@ -57,7 +57,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return reconcile.Result{}, err
 	}
 
-	pipeline := &apiv1.Pipeline{}
+	pipeline := &v1alpha1.Pipeline{}
 	err := r.Get(ctx, req.NamespacedName, pipeline)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -127,7 +127,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	pipeline.Status.Message = emus.PipelineStatusSuccess
 	r.Event.Event(pipeline, corev1.EventTypeNormal, "SuccessfulApplyPipeline", pipeline.Status.Message)
 	pipeline.Status.LastUpdateTime = metav1.Now()
-	pipeline.Status.LastAppliedConfig = apiv1.LastAppliedConfig{
+	pipeline.Status.LastAppliedConfig = v1alpha1.LastAppliedConfig{
 		AppliedTime: metav1.Now(),
 		Content:     pipeline.Spec.Content,
 	}
@@ -141,7 +141,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 }
 
 // validatePipeline validates the pipeline configuration
-func (r *PipelineReconciler) validatePipeline(pipeline *apiv1.Pipeline) error {
+func (r *PipelineReconciler) validatePipeline(pipeline *v1alpha1.Pipeline) error {
 	if pipeline.Spec.Name == "" {
 		return fmt.Errorf("pipeline name cannot be empty")
 	}
@@ -187,7 +187,7 @@ func (r *PipelineReconciler) getConfigServerURL(ctx context.Context) error {
 }
 
 // cleanupPipeline 清理Pipeline相关的资源
-func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *apiv1.Pipeline) error {
+func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	log := r.Log.WithValues("pipeline", pipeline.Name)
 
 	agentClient := configserver.NewAgentClient(r.BaseURL)
@@ -203,6 +203,6 @@ func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *apiv
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apiv1.Pipeline{}).
+		For(&v1alpha1.Pipeline{}).
 		Complete(r)
 }
