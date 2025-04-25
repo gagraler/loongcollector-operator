@@ -34,13 +34,16 @@ type PipelineSpec struct {
 	// content is the pipeline configuration
 	Content string `json:"content"`
 
-	// 适配Logtail字段
+	// Project defines the SLS project configuration
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Project runtime.RawExtension `json:"project,omitempty"`
+	// LogStores defines the SLS logstore configurations
 	// +kubebuilder:pruning:PreserveUnknownFields
 	LogStores runtime.RawExtension `json:"logStores,omitempty"`
+	// MachineGroups defines the machine groups for log collection
 	// +kubebuilder:pruning:PreserveUnknownFields
 	MachineGroups runtime.RawExtension `json:"machineGroups,omitempty"`
+	// EnableUpgradeOverride indicates whether to enable upgrade override
 	// +kubebuilder:pruning:PreserveUnknownFields
 	EnableUpgradeOverride bool `json:"enableUpgradeOverride,omitempty"`
 }

@@ -155,14 +155,6 @@ func (r *PipelineReconciler) validatePipeline(pipeline *v1alpha1.Pipeline) error
 		return fmt.Errorf("invalid YAML format: %v", err)
 	}
 
-	// Validate required fields
-	if _, ok := config["inputs"]; !ok {
-		return fmt.Errorf("missing required field: inputs")
-	}
-	if _, ok := config["outputs"]; !ok {
-		return fmt.Errorf("missing required field: outputs")
-	}
-
 	return nil
 }
 
