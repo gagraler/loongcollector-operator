@@ -81,7 +81,7 @@ kubectl apply -f config/samples/pipeline.yaml
 Pipeline CRD 定义了以下字段：
 
 - `spec.name`: Pipeline 名称
-- `spec.config`: Pipeline 配置（YAML 格式）
+- `spec.content`: Pipeline 配置（YAML 格式）
 
 #### Config-Server 配置
 
@@ -129,7 +129,6 @@ make docker-build
 │   ├── crd/              # CRD 定义
 │   ├── manager/          # 管理器配置
 │   └── samples/          # 示例配置
-├── controllers/          # 控制器
 ├── internal/            # 内部包
 │   ├── controller/      # 控制器实现
 │   └── pkg/            # 工具包
