@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
-	"gopkg.in/yaml.v3"
 	"io"
 	"net/http"
 	"time"
+
+	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
+	"gopkg.in/yaml.v3"
 )
 
 // AgentClient represents a config server client

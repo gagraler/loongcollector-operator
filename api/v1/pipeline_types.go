@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -32,6 +33,16 @@ type PipelineSpec struct {
 	Name string `json:"name"`
 	// content is the pipeline configuration
 	Content string `json:"content"`
+
+	// 适配Logtail字段
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Project runtime.RawExtension `json:"project,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	LogStores runtime.RawExtension `json:"logStores,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	MachineGroups runtime.RawExtension `json:"machineGroups,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	EnableUpgradeOverride bool `json:"enableUpgradeOverride,omitempty"`
 }
 
 // PipelineStatus defines the observed state of Pipeline.
@@ -39,14 +50,19 @@ type PipelineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Synced indicates whether the pipeline is synced with the agent
-	Synced bool `json:"synced,omitempty"`
-	// Reason is the reason for the pipeline status
-	Reason string `json:"reason,omitempty"`
-	// Applied indicates whether the pipeline has been applied to the agent
-	Applied bool `json:"applied"`
-	// LastAppliedTime is the last time the pipeline was applied
-	LastAppliedTime metav1.Time `json:"lastAppliedTime,omitempty"`
+	// Success indicates whether the pipeline was successfully created
+	Success bool `json:"success"`
+	// Message is the message of the pipeline
+	Message string `json:"message,omitempty"`
+	// LastUpdateTime is the last time the pipeline was updated
+	LastUpdateTime metav1.Time `json:"LastUpdateTime,omitempty"`
+	// LastAppliedConfig is the last applied configuration of the pipeline
+	LastAppliedConfig LastAppliedConfig `json:"lastAppliedConfig,omitempty"`
+}
+
+type LastAppliedConfig struct {
+	AppliedTime metav1.Time `json:"appliedTime,omitempty"`
+	Content     string      `json:"content,omitempty"`
 }
 
 // +kubebuilder:object:root=true

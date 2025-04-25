@@ -1,37 +1,51 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: loongcollector-agent
+  name: loongcollector
   namespace: loongcollector-system
 spec:
   selector:
     matchLabels:
-      app: loongcollector-agent
+      app: loongcollector
   template:
     metadata:
       labels:
-        app: loongcollector-agent
+        app: loongcollector
     spec:
+      tolerations:
+        - operator: Exists
       containers:
-      - name: agent
-        image: loongcollector-agent:latest
+      - name: loongcollector
+        image: sls-opensource-registry.cn-shanghai.cr.aliyuncs.com/ilogtail-community-edition/ilogtail:latest
+        imagePullPolicy: Always
         resources:
           limits:
-            cpu: 200m
-            memory: 200Mi
+            cpu: 1000m
+            memory: 1Gi
           requests:
-            cpu: 100m
-            memory: 100Mi
+            cpu: 400m
+            memory: 384Mi
         volumeMounts:
-        - name: log
-          mountPath: /var/log
-        - name: containers
-          mountPath: /var/lib/docker/containers
+        - name: run
+          mountPath: /var/run
+        - name: root
+          mountPropagation: HostToContainer
           readOnly: true
+          mountPath: /logtail_host
+        - name: checkpoint
+          mountPath: /usr/local/ilogtail/checkpoint
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
       volumes:
-      - name: log
-        hostPath:
-          path: /var/log
-      - name: containers
-        hostPath:
-          path: /var/lib/docker/containers 
+        - hostPath:
+            path: /var/run
+            type: Directory
+          name: run
+        - hostPath:
+            path: /
+            type: Directory
+          name: root
+        - hostPath:
+            path: /etc/ilogtail-ilogtail-ds/checkpoint
+            type: DirectoryOrCreate
+          name: checkpoint

@@ -42,9 +42,22 @@ spec:
               content:
                 description: content is the pipeline configuration
                 type: string
+              enableUpgradeOverride:
+                type: boolean
+                x-kubernetes-preserve-unknown-fields: true
+              logStores:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              machineGroups:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               name:
                 description: Name of the pipeline
                 type: string
+              project:
+                description: 适配Logtail字段
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
             required:
             - content
             - name
@@ -52,23 +65,19 @@ spec:
           status:
             description: PipelineStatus defines the observed state of Pipeline.
             properties:
-              applied:
-                description: Applied indicates whether the pipeline has been applied
-                  to the agent
-                type: boolean
-              lastAppliedTime:
-                description: LastAppliedTime is the last time the pipeline was applied
+              LastUpdateTime:
+                description: LastUpdateTime is the last time the pipeline was updated
                 format: date-time
                 type: string
-              reason:
-                description: Reason is the reason for the pipeline status
+              message:
+                description: Message is the message of the pipeline
                 type: string
-              synced:
-                description: Synced indicates whether the pipeline is synced with
-                  the agent
+              success:
+                description: Success indicates whether the pipeline was successfully
+                  created
                 type: boolean
             required:
-            - applied
+            - success
             type: object
         type: object
     served: true

@@ -19,14 +19,15 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
-	"github.com/gagraler/loongcollector-operator/internal/controller"
 	"os"
 	"path/filepath"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
+	apiv1 "github.com/gagraler/loongcollector-operator/api/v1"
+	"github.com/gagraler/loongcollector-operator/internal/controller"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -204,6 +205,7 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Pipeline"),
+		Event:  mgr.GetEventRecorderFor("Pipeline"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pipeline")
 		os.Exit(1)

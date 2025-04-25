@@ -3,8 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/gagraler/loongcollector-operator/internal/pkg/configserver"
+	"k8s.io/client-go/tools/record"
 	"time"
+
+	"github.com/gagraler/loongcollector-operator/internal/emus"
+	"github.com/gagraler/loongcollector-operator/internal/pkg/configserver"
 
 	"github.com/go-logr/logr"
 	"gopkg.in/yaml.v3"
@@ -25,6 +28,7 @@ type PipelineReconciler struct {
 	client.Client
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
+	Event   record.EventRecorder
 	BaseURL string
 }
 
@@ -38,10 +42,10 @@ const (
 	pipelineFinalizer  = "pipeline.finalizers.infraflow.co"
 )
 
-//+kubebuilder:rbac:groups=infraflow.co,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=infraflow.co,resources=pipelines/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=infraflow.co,resources=pipelines/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infraflow.co,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infraflow.co,resources=pipelines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=infraflow.co,resources=pipelines/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -62,7 +66,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return reconcile.Result{}, err
 	}
 
-	if !pipeline.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !pipeline.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(pipeline, pipelineFinalizer) {
 			if err := r.cleanupPipeline(ctx, pipeline); err != nil {
 				log.Error(err, "Failed to cleanup pipeline")
@@ -88,8 +92,10 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if err := r.validatePipeline(pipeline); err != nil {
 		log.Error(err, "Invalid pipeline configuration")
-		pipeline.Status.Reason = fmt.Sprintf("Invalid configuration: %v", err)
-		pipeline.Status.Applied = false
+		pipeline.Status.Success = false
+		pipeline.Status.Message = emus.PipelineStatusInvalid
+		r.Event.Event(pipeline, corev1.EventTypeWarning, "InvalidPipeline", err.Error())
+		pipeline.Status.LastUpdateTime = metav1.Now()
 		_ = r.Status().Update(ctx, pipeline)
 		return reconcile.Result{}, err
 	}
@@ -109,15 +115,22 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if lastErr != nil {
 		log.Error(lastErr, "Failed to apply pipeline to agent after retries")
-		pipeline.Status.Reason = fmt.Sprintf("Failed to apply: %v", lastErr)
-		pipeline.Status.Applied = false
+		pipeline.Status.Success = false
+		pipeline.Status.Message = emus.PipelineStatusFailed
+		r.Event.Event(pipeline, corev1.EventTypeWarning, "FailedToApplyPipeline", lastErr.Error())
+		pipeline.Status.LastUpdateTime = metav1.Now()
 		_ = r.Status().Update(ctx, pipeline)
 		return reconcile.Result{}, lastErr
 	}
 
-	pipeline.Status.Applied = true
-	pipeline.Status.Reason = ""
-	pipeline.Status.LastAppliedTime = metav1.Now()
+	pipeline.Status.Success = true
+	pipeline.Status.Message = emus.PipelineStatusSuccess
+	r.Event.Event(pipeline, corev1.EventTypeNormal, "SuccessfulApplyPipeline", pipeline.Status.Message)
+	pipeline.Status.LastUpdateTime = metav1.Now()
+	pipeline.Status.LastAppliedConfig = apiv1.LastAppliedConfig{
+		AppliedTime: metav1.Now(),
+		Content:     pipeline.Spec.Content,
+	}
 	if err := r.Status().Update(ctx, pipeline); err != nil {
 		log.Error(err, "Failed to update pipeline status")
 		return ctrl.Result{RequeueAfter: time.Minute * 1}, err
