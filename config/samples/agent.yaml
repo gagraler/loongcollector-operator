@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: loongcollector-agent
+  namespace: loongcollector-system
+spec:
+  selector:
+    matchLabels:
+      app: loongcollector-agent
+  template:
+    metadata:
+      labels:
+        app: loongcollector-agent
+    spec:
+      containers:
+      - name: agent
+        image: loongcollector-agent:latest
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        volumeMounts:
+        - name: log
+          mountPath: /var/log
+        - name: containers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      volumes:
+      - name: log
+        hostPath:
+          path: /var/log
+      - name: containers
+        hostPath:
+          path: /var/lib/docker/containers 

@@ -1,0 +1,40 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - infraflow.co
+  resources:
+  - pipelines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - infraflow.co
+  resources:
+  - pipelines/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - infraflow.co
+  resources:
+  - pipelines/status
+  verbs:
+  - get
+  - patch
+  - update

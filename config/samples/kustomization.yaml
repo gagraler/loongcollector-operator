@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- infraflow_v1_pipeline.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

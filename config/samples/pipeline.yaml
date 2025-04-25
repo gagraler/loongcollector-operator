@@ -1,0 +1,16 @@
+apiVersion: infraflow.co/v1
+kind: Pipeline
+metadata:
+  name: sample-pipeline
+spec:
+  name: sample-pipeline
+  content: |
+    inputs:
+      - type: file
+        path: /var/log/containers/*.log
+    processors:
+      - type: json
+        fields:
+          - message
+    outputs:
+      - type: stdout
