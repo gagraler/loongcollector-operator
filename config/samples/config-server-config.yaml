@@ -1,7 +1,0 @@
-apiVersion: v1alpha1
-kind: ConfigMap
-metadata:
-  name: config-server-config
-  namespace: loongcollector-system
-data:
-  configServerURL: "http://localhost:8899"  # 默认值 
