@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gagraler/loongcollector-operator/internal/emus"
-	"github.com/gagraler/loongcollector-operator/internal/pkg/configserver"
+	"github.com/infraflows/loongcollector-operator/internal/emus"
+	"github.com/infraflows/loongcollector-operator/internal/pkg/configserver"
 
 	"github.com/go-logr/logr"
 	"gopkg.in/yaml.v3"
@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/gagraler/loongcollector-operator/api/v1alpha1"
+	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
 )
 
 // PipelineReconciler reconciles a Pipeline object
@@ -40,6 +40,7 @@ const (
 	maxRetries         = 3
 	retryDelay         = time.Second * 5
 	pipelineFinalizer  = "pipeline.finalizers.infraflow.co"
+	syncInterval       = time.Minute * 5
 )
 
 // +kubebuilder:rbac:groups=infraflow.co,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
@@ -100,8 +101,32 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return reconcile.Result{}, err
 	}
 
-	var lastErr error
 	agentClient := configserver.NewAgentClient(r.BaseURL)
+
+	// Create or update agent group if specified
+	if pipeline.Spec.AgentGroup != "" {
+		group := &configserver.AgentGroup{
+			Name:        pipeline.Spec.AgentGroup,
+			Description: fmt.Sprintf("Agent group for pipeline %s", pipeline.Name),
+			Tags:        []string{pipeline.Name},
+		}
+
+		// Try to create the agent group
+		if err := agentClient.CreateAgentGroup(ctx, group); err != nil {
+			// If the group already exists, try to update it
+			if err := agentClient.UpdateAgentGroup(ctx, group); err != nil {
+				log.Error(err, "Failed to create/update agent group")
+				pipeline.Status.Success = false
+				pipeline.Status.Message = emus.PipelineStatusFailed
+				r.Event.Event(pipeline, corev1.EventTypeWarning, "FailedToCreateAgentGroup", err.Error())
+				pipeline.Status.LastUpdateTime = metav1.Now()
+				_ = r.Status().Update(ctx, pipeline)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if err := agentClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
 			lastErr = err
@@ -109,6 +134,17 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			time.Sleep(retryDelay)
 			continue
 		}
+
+		// If agent group is specified, bind the pipeline to the group
+		if pipeline.Spec.AgentGroup != "" {
+			if err := agentClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+				lastErr = err
+				log.Error(err, "Failed to bind pipeline to agent group, retrying", "attempt", i+1, "maxAttempts", maxRetries)
+				time.Sleep(retryDelay)
+				continue
+			}
+		}
+
 		lastErr = nil
 		break
 	}
@@ -133,11 +169,11 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	if err := r.Status().Update(ctx, pipeline); err != nil {
 		log.Error(err, "Failed to update pipeline status")
-		return ctrl.Result{RequeueAfter: time.Minute * 1}, err
+		return ctrl.Result{RequeueAfter: syncInterval}, err
 	}
 
 	log.Info("Successfully applied pipeline configuration")
-	return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
 // validatePipeline validates the pipeline configuration
@@ -186,6 +222,14 @@ func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1al
 	if err := agentClient.DeletePipelineToAgent(ctx, pipeline); err != nil {
 		log.Error(err, "Failed to delete pipeline from config server")
 		return err
+	}
+
+	// If agent group is specified, remove the pipeline from the group
+	if pipeline.Spec.AgentGroup != "" {
+		if err := agentClient.RemoveConfigFromAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+			log.Error(err, "Failed to remove pipeline from agent group")
+			return err
+		}
 	}
 
 	log.Info("Successfully cleaned up pipeline")

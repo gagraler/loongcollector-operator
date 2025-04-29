@@ -1,7 +1,11 @@
 apiVersion: infraflow.co/v1alpha1
 kind: Pipeline
 metadata:
-  name: sample-pipeline
+  labels:
+    app.kubernetes.io/name: loongcollector-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: pipeline-sample
+  namespace: loongcollector-system
 spec:
   name: sample-pipeline
   content: |

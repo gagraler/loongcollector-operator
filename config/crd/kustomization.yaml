@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/infraflow.co_pipelines.yaml
+- bases/infraflow.co.infraflow_agentgroups.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

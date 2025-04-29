@@ -6,7 +6,7 @@ domain: co.infraflow
 layout:
 - go.kubebuilder.io/v4
 projectName: loongcollector-operator
-repo: github.com/gagraler/loongcollector-operator
+repo: github.com/infraflows/loongcollector-operator
 resources:
 - api:
     crdVersion: v1
@@ -15,6 +15,15 @@ resources:
   domain: co.infraflow
   group: infraflow
   kind: Pipeline
-  path: github.com/gagraler/loongcollector-operator/api/v1
-  version: v1
+  path: github.com/infraflows/loongcollector-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: co.infraflow
+  group: infraflow
+  kind: AgentGroup
+  path: github.com/infraflows/loongcollector-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

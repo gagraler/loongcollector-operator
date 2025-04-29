@@ -1,31 +1,32 @@
 package configserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
 
-	"github.com/gagraler/loongcollector-operator/api/v1alpha1"
+	"github.com/go-resty/resty/v2"
+	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
 	"gopkg.in/yaml.v3"
 )
 
 // AgentClient represents a config server client
 type AgentClient struct {
-	baseURL    string
-	httpClient *http.Client
+	client *resty.Client
 }
 
 // NewAgentClient creates a new config server client
 func NewAgentClient(baseURL string) *AgentClient {
+	client := resty.New().
+		SetBaseURL(baseURL).
+		SetTimeout(10*time.Second).
+		SetHeader("Content-Type", "application/json").
+		SetRetryCount(3).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second)
+
 	return &AgentClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		client: client,
 	}
 }
 
@@ -43,40 +44,24 @@ func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alph
 			"content": config,
 		},
 	}
-	jsonBody, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request body: %v", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/User/CreateConfig", a.baseURL), bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	cli := &http.Client{Timeout: time.Second * 10}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request to configserver: %v", err)
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			return
-		}
-	}(resp.Body)
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
 
 	var response struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(bodyBytes, &response); err != nil {
-		return fmt.Errorf("failed to parse response: %v", err)
+
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetBody(payload).
+		SetResult(&response).
+		Post("/User/CreateConfig")
+
+	if err != nil {
+		return fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	if response.Code != 200 {
@@ -88,28 +73,175 @@ func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alph
 
 // DeletePipelineToAgent 从Config-Server删除Pipeline配置
 func (a *AgentClient) DeletePipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE",
-		fmt.Sprintf("%s/User/DeleteConfig/%s", a.baseURL, pipeline.Spec.Name), nil)
-	if err != nil {
-		return fmt.Errorf("failed to create delete request: %v", err)
-	}
+	resp, err := a.client.R().
+		SetContext(ctx).
+		Delete(fmt.Sprintf("/User/DeleteConfig/%s", pipeline.Spec.Name))
 
-	c := &http.Client{Timeout: time.Second * 10}
-	resp, err := c.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send delete request to configserver: %v", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			return
-		}
-	}(resp.Body)
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	if resp.StatusCode() != 200 && resp.StatusCode() != 404 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	return nil
+}
+
+// AgentGroup represents an agent group
+type AgentGroup struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+// CreateAgentGroup creates a new agent group
+func (a *AgentClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) error {
+	var response struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetBody(group).
+		SetResult(&response).
+		Post("/User/CreateAgentGroup")
+
+	if err != nil {
+		return fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	if response.Code != 200 {
+		return fmt.Errorf("configserver returned error: %s", response.Message)
+	}
+
+	return nil
+}
+
+// UpdateAgentGroup updates an existing agent group
+func (a *AgentClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) error {
+	var response struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetBody(group).
+		SetResult(&response).
+		Put("/User/UpdateAgentGroup")
+
+	if err != nil {
+		return fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	if response.Code != 200 {
+		return fmt.Errorf("configserver returned error: %s", response.Message)
+	}
+
+	return nil
+}
+
+// DeleteAgentGroup deletes an agent group
+func (a *AgentClient) DeleteAgentGroup(ctx context.Context, groupName string) error {
+	resp, err := a.client.R().
+		SetContext(ctx).
+		Delete(fmt.Sprintf("/User/DeleteAgentGroup/%s", groupName))
+
+	if err != nil {
+		return fmt.Errorf("failed to send delete request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 && resp.StatusCode() != 404 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// ApplyConfigToAgentGroup applies a config to an agent group
+func (a *AgentClient) ApplyConfigToAgentGroup(ctx context.Context, configName, groupName string) error {
+	payload := map[string]string{
+		"config_name": configName,
+		"group_name":  groupName,
+	}
+
+	var response struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetBody(payload).
+		SetResult(&response).
+		Post("/User/ApplyConfigToAgentGroup")
+
+	if err != nil {
+		return fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	if response.Code != 200 {
+		return fmt.Errorf("configserver returned error: %s", response.Message)
+	}
+
+	return nil
+}
+
+// RemoveConfigFromAgentGroup removes a config from an agent group
+func (a *AgentClient) RemoveConfigFromAgentGroup(ctx context.Context, configName, groupName string) error {
+	resp, err := a.client.R().
+		SetContext(ctx).
+		Delete(fmt.Sprintf("/User/RemoveConfigFromAgentGroup/%s/%s", configName, groupName))
+
+	if err != nil {
+		return fmt.Errorf("failed to send delete request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 && resp.StatusCode() != 404 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// ListAgentGroups lists all agent groups
+func (a *AgentClient) ListAgentGroups(ctx context.Context) ([]AgentGroup, error) {
+	var response struct {
+		Code    int          `json:"code"`
+		Message string       `json:"message"`
+		Data    []AgentGroup `json:"data"`
+	}
+
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetResult(&response).
+		Get("/User/ListAgentGroups")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return nil, fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	if response.Code != 200 {
+		return nil, fmt.Errorf("configserver returned error: %s", response.Message)
+	}
+
+	return response.Data, nil
 }

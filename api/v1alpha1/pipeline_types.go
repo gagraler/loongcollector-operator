@@ -34,17 +34,27 @@ type PipelineSpec struct {
 	// content is the pipeline configuration
 	Content string `json:"content"`
 
+	// AgentGroup specifies the agent group to which this pipeline should be applied
+	// +optional
+	AgentGroup string `json:"agentGroup,omitempty"`
+
+	// 支持logtail
+	// https://help.aliyun.com/zh/sls/user-guide/recommend-use-aliyunpipelineconfig-to-manage-collection-configurations?spm=a2c4g.11186623.help-menu-28958.d_2_1_1_3_2_0.3b56694e44bSyR&scm=20140722.H_2833390._.OR_help-T_cn~zh-V_1#770941e164v6h
 	// Project defines the SLS project configuration
 	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
 	Project runtime.RawExtension `json:"project,omitempty"`
 	// LogStores defines the SLS logstore configurations
 	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
 	LogStores runtime.RawExtension `json:"logStores,omitempty"`
 	// MachineGroups defines the machine groups for log collection
 	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
 	MachineGroups runtime.RawExtension `json:"machineGroups,omitempty"`
 	// EnableUpgradeOverride indicates whether to enable upgrade override
 	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
 	EnableUpgradeOverride bool `json:"enableUpgradeOverride,omitempty"`
 }
 

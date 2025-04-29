@@ -27,10 +27,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
+	infraflowv1alpha1 "github.com/infraflows/loongcollector-operator/api/v1alpha1"
 )
 
-var _ = Describe("Pipeline Controller", func() {
+var _ = Describe("AgentGroup Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("Pipeline Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		pipeline := &v1alpha1.Pipeline{}
+		agentgroup := &infraflowv1alpha1.AgentGroup{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind Pipeline")
-			err := k8sClient.Get(ctx, typeNamespacedName, pipeline)
+			By("creating the custom resource for the Kind AgentGroup")
+			err := k8sClient.Get(ctx, typeNamespacedName, agentgroup)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &v1alpha1.Pipeline{
+				resource := &infraflowv1alpha1.AgentGroup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("Pipeline Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &v1alpha1.Pipeline{}
+			resource := &infraflowv1alpha1.AgentGroup{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance Pipeline")
+			By("Cleanup the specific resource instance AgentGroup")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &PipelineReconciler{
+			controllerReconciler := &AgentGroupReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
