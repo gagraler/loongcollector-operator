@@ -2,8 +2,8 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/infraflow.co_pipelines.yaml
-- bases/infraflow.co.infraflow_agentgroups.yaml
+- bases/loongcollector.infraflow.co_pipelines.yaml
+- bases/loongcollector.infraflow.co_agentgroups.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

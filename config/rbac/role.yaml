@@ -15,6 +15,7 @@ rules:
 - apiGroups:
   - infraflow.co
   resources:
+  - agentgroups
   - pipelines
   verbs:
   - create
@@ -27,39 +28,15 @@ rules:
 - apiGroups:
   - infraflow.co
   resources:
+  - agentgroups/finalizers
   - pipelines/finalizers
   verbs:
   - update
 - apiGroups:
   - infraflow.co
   resources:
-  - pipelines/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - infraflow.co.infraflow
-  resources:
-  - agentgroups
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - infraflow.co.infraflow
-  resources:
-  - agentgroups/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - infraflow.co.infraflow
-  resources:
   - agentgroups/status
+  - pipelines/status
   verbs:
   - get
   - patch

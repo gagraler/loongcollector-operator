@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: agentgroups.infraflow.co
+  name: agentgroups.loongcollector.infraflow.co
 spec:
-  group: infraflow.co
+  group: loongcollector.infraflow.co
   names:
     kind: AgentGroup
     listKind: AgentGroupList
@@ -39,13 +39,47 @@ spec:
           spec:
             description: AgentGroupSpec defines the desired state of AgentGroup.
             properties:
-              foo:
-                description: Foo is an example field of AgentGroup. Edit agentgroup_types.go
-                  to remove/update
+              configs:
+                description: Configs that should be applied to this agent group
+                items:
+                  type: string
+                type: array
+              description:
+                description: Description of the agent group
                 type: string
+              name:
+                description: Name of the agent group
+                type: string
+              tags:
+                description: Tags for the agent group
+                items:
+                  type: string
+                type: array
+            required:
+            - name
             type: object
           status:
             description: AgentGroupStatus defines the observed state of AgentGroup.
+            properties:
+              appliedConfigs:
+                description: AppliedConfigs is the list of configs that have been
+                  applied to this agent group
+                items:
+                  type: string
+                type: array
+              lastUpdateTime:
+                description: LastUpdateTime is the last time the agent group was updated
+                format: date-time
+                type: string
+              message:
+                description: Message is the message of the agent group
+                type: string
+              success:
+                description: Success indicates whether the agent group was successfully
+                  created
+                type: boolean
+            required:
+            - success
             type: object
         type: object
     served: true

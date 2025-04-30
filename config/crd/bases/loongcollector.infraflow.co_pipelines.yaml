@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: pipelines.infraflow.co
+  name: pipelines.loongcollector.infraflow.co
 spec:
-  group: infraflow.co
+  group: loongcollector.infraflow.co
   names:
     kind: Pipeline
     listKind: PipelineList
