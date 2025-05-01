@@ -98,7 +98,7 @@ func (r *AgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	agentClient := configserver.NewAgentClient(r.BaseURL)
+	agentClient := configserver.NewConfigServerClient(r.BaseURL)
 	group := &configserver.AgentGroup{
 		Name:        agentGroup.Spec.Name,
 		Description: agentGroup.Spec.Description,
@@ -180,7 +180,7 @@ func (r *AgentGroupReconciler) getConfigServerURL(ctx context.Context) error {
 func (r *AgentGroupReconciler) cleanupAgentGroup(ctx context.Context, agentGroup *v1alpha1.AgentGroup) error {
 	log := r.Log.WithValues("agentgroup", agentGroup.Name)
 
-	agentClient := configserver.NewAgentClient(r.BaseURL)
+	agentClient := configserver.NewConfigServerClient(r.BaseURL)
 	if err := agentClient.DeleteAgentGroup(ctx, agentGroup.Spec.Name); err != nil {
 		log.Error(err, "Failed to delete agent group from config server")
 		return err

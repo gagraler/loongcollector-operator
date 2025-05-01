@@ -7,18 +7,17 @@ import (
 
 	"github.com/infraflows/loongcollector-operator/internal/emus"
 	"github.com/infraflows/loongcollector-operator/internal/pkg/configserver"
+	"github.com/infraflows/loongcollector-operator/internal/pkg/kube"
 
 	"github.com/go-logr/logr"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
 )
@@ -26,10 +25,11 @@ import (
 // PipelineReconciler reconciles a Pipeline object
 type PipelineReconciler struct {
 	client.Client
-	Log     logr.Logger
-	Scheme  *runtime.Scheme
-	Event   record.EventRecorder
-	BaseURL string
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Event    record.EventRecorder
+	BaseURL  string
+	informer *kube.PipelineInformer
 }
 
 const (
@@ -48,150 +48,165 @@ const (
 // +kubebuilder:rbac:groups=infraflow.co,resources=pipelines/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
 func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("pipeline", req.NamespacedName)
 
-	if err := r.getConfigServerURL(ctx); err != nil {
-		log.Error(err, "Failed to get ConfigServer URL")
-		return reconcile.Result{}, err
-	}
-
 	pipeline := &v1alpha1.Pipeline{}
-	err := r.Get(ctx, req.NamespacedName, pipeline)
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, pipeline); err != nil {
 		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
+			log.Info("pipeline resource not found")
+			return ctrl.Result{}, nil
 		}
-		return reconcile.Result{}, err
+		log.Error(err, "failed to fetch pipeline resource")
+		return ctrl.Result{}, err
+	}
+	if pipeline.DeletionTimestamp != nil {
+		err := kube.HandleFinalizerWithCleanup(ctx, r.Client, pipeline, pipelineFinalizer, r.Log, r.cleanupPipeline)
+		return ctrl.Result{}, err
 	}
 
-	if !pipeline.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(pipeline, pipelineFinalizer) {
-			if err := r.cleanupPipeline(ctx, pipeline); err != nil {
-				log.Error(err, "Failed to cleanup pipeline")
-				return reconcile.Result{}, err
-			}
+	return r.handlePipelineCreateOrUpdate(ctx, pipeline)
+}
 
-			controllerutil.RemoveFinalizer(pipeline, pipelineFinalizer)
-			if err := r.Update(ctx, pipeline); err != nil {
-				log.Error(err, "Failed to remove finalizer")
-				return reconcile.Result{}, err
-			}
-		}
-		return reconcile.Result{}, nil
+// SetupWithManager sets up the controller with the Manager.
+func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
-	if !controllerutil.ContainsFinalizer(pipeline, pipelineFinalizer) {
-		controllerutil.AddFinalizer(pipeline, pipelineFinalizer)
-		if err := r.Update(ctx, pipeline); err != nil {
-			log.Error(err, "Failed to add finalizer")
-			return reconcile.Result{}, err
+	r.informer = kube.NewPipelineInformer(r.Client, dynClient, r.Log)
+	go func() {
+		if err := r.informer.Run(context.Background()); err != nil {
+			r.Log.Error(err, "Failed to run pipeline informer")
 		}
-	}
+	}()
 
-	if err := r.validatePipeline(pipeline); err != nil {
-		log.Error(err, "Invalid pipeline configuration")
-		pipeline.Status.Success = false
-		pipeline.Status.Message = emus.PipelineStatusInvalid
-		r.Event.Event(pipeline, corev1.EventTypeWarning, "InvalidPipeline", err.Error())
-		pipeline.Status.LastUpdateTime = metav1.Now()
-		_ = r.Status().Update(ctx, pipeline)
-		return reconcile.Result{}, err
-	}
+	// 在启动时处理所有现有的 Pipeline CRD
+	go func() {
+		// 等待 informer 缓存同步
+		time.Sleep(5 * time.Second)
 
-	agentClient := configserver.NewAgentClient(r.BaseURL)
-
-	// Create or update agent group if specified
-	if pipeline.Spec.AgentGroup != "" {
-		group := &configserver.AgentGroup{
-			Name:        pipeline.Spec.AgentGroup,
-			Description: fmt.Sprintf("Agent group for pipeline %s", pipeline.Name),
-			Tags:        []string{pipeline.Name},
+		var pipelines v1alpha1.PipelineList
+		if err := r.List(context.Background(), &pipelines); err != nil {
+			r.Log.Error(err, "Failed to list existing pipelines")
+			return
 		}
 
-		// Try to create the agent group
-		if err := agentClient.CreateAgentGroup(ctx, group); err != nil {
-			// If the group already exists, try to update it
-			if err := agentClient.UpdateAgentGroup(ctx, group); err != nil {
-				log.Error(err, "Failed to create/update agent group")
-				pipeline.Status.Success = false
-				pipeline.Status.Message = emus.PipelineStatusFailed
-				r.Event.Event(pipeline, corev1.EventTypeWarning, "FailedToCreateAgentGroup", err.Error())
-				pipeline.Status.LastUpdateTime = metav1.Now()
-				_ = r.Status().Update(ctx, pipeline)
-				return reconcile.Result{}, err
+		for _, pipeline := range pipelines.Items {
+			pipelineCopy := pipeline
+			if _, err := r.handlePipelineCreateOrUpdate(context.Background(), &pipelineCopy); err != nil {
+				r.Log.Error(err, "Failed to apply existing pipeline", "pipeline", pipeline.Name)
 			}
 		}
+	}()
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.Pipeline{}).
+		Complete(r)
+}
+
+// handlePipelineCreateOrUpdate 处理Pipeline创建或更新
+func (r *PipelineReconciler) handlePipelineCreateOrUpdate(ctx context.Context, pipeline *v1alpha1.Pipeline) (ctrl.Result, error) {
+	if err := kube.HandleFinalizerWithCleanup(ctx, r.Client, pipeline, pipelineFinalizer, r.Log, r.cleanupPipeline); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	var lastErr error
-	for i := 0; i < maxRetries; i++ {
-		if err := agentClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
-			lastErr = err
-			log.Error(err, "Failed to apply pipeline to agent, retrying", "attempt", i+1, "maxAttempts", maxRetries)
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		// If agent group is specified, bind the pipeline to the group
-		if pipeline.Spec.AgentGroup != "" {
-			if err := agentClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
-				lastErr = err
-				log.Error(err, "Failed to bind pipeline to agent group, retrying", "attempt", i+1, "maxAttempts", maxRetries)
-				time.Sleep(retryDelay)
-				continue
-			}
-		}
-
-		lastErr = nil
-		break
+	// 检查是否需要更新
+	if !r.shouldUpdatePipeline(ctx, pipeline) {
+		r.Log.V(1).Info("Pipeline content unchanged, skipping update", "pipeline", pipeline.Name)
+		return ctrl.Result{RequeueAfter: syncInterval}, nil
 	}
 
-	if lastErr != nil {
-		log.Error(lastErr, "Failed to apply pipeline to agent after retries")
-		pipeline.Status.Success = false
-		pipeline.Status.Message = emus.PipelineStatusFailed
-		r.Event.Event(pipeline, corev1.EventTypeWarning, "FailedToApplyPipeline", lastErr.Error())
-		pipeline.Status.LastUpdateTime = metav1.Now()
-		_ = r.Status().Update(ctx, pipeline)
-		return reconcile.Result{}, lastErr
+	if err := r.applyPipelineToAgent(ctx, pipeline); err != nil {
+		return r.updateStatusFailure(ctx, pipeline, emus.PipelineStatusFailed, err)
 	}
 
 	pipeline.Status.Success = true
 	pipeline.Status.Message = emus.PipelineStatusSuccess
-	r.Event.Event(pipeline, corev1.EventTypeNormal, "SuccessfulApplyPipeline", pipeline.Status.Message)
 	pipeline.Status.LastUpdateTime = metav1.Now()
 	pipeline.Status.LastAppliedConfig = v1alpha1.LastAppliedConfig{
 		AppliedTime: metav1.Now(),
 		Content:     pipeline.Spec.Content,
 	}
 	if err := r.Status().Update(ctx, pipeline); err != nil {
-		log.Error(err, "Failed to update pipeline status")
-		return ctrl.Result{RequeueAfter: syncInterval}, err
+		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully applied pipeline configuration")
 	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
-// validatePipeline validates the pipeline configuration
-func (r *PipelineReconciler) validatePipeline(pipeline *v1alpha1.Pipeline) error {
-	if pipeline.Spec.Name == "" {
-		return fmt.Errorf("pipeline name cannot be empty")
-	}
-	if pipeline.Spec.Content == "" {
-		return fmt.Errorf("pipeline content cannot be empty")
+// shouldUpdatePipeline 检查Pipeline是否需要更新
+func (r *PipelineReconciler) shouldUpdatePipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) bool {
+	// 如果是新创建的Pipeline，需要更新
+	if pipeline.Status.LastAppliedConfig.Content == "" {
+		return true
 	}
 
-	// Try to parse YAML to validate format
-	var config map[string]interface{}
-	if err := yaml.Unmarshal([]byte(pipeline.Spec.Content), &config); err != nil {
-		return fmt.Errorf("invalid YAML format: %v", err)
+	// 检查关键字段是否有变化
+	if pipeline.Spec.Content != pipeline.Status.LastAppliedConfig.Content {
+		return true
 	}
 
-	return nil
+	// 检查AgentGroup是否有变化
+	if pipeline.Spec.AgentGroup != "" {
+		// 获取当前AgentGroup的配置
+		agentClient := configserver.NewConfigServerClient(r.BaseURL)
+		groups, err := agentClient.ListAgentGroups(ctx)
+		if err != nil {
+			r.Log.Error(err, "Failed to list agent groups, assuming update needed", "pipeline", pipeline.Name)
+			return true
+		}
+
+		// 检查Pipeline是否在当前AgentGroup中
+		for _, group := range groups {
+			if group.Name == pipeline.Spec.AgentGroup {
+				// TODO: 这里需要添加检查Pipeline是否在group中的逻辑
+				// 暂时假设需要更新
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// applyPipelineToAgent 应用Pipeline配置到Agent
+func (r *PipelineReconciler) applyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
+	if err := r.getConfigServerURL(ctx); err != nil {
+		return err
+	}
+
+	agentClient := configserver.NewConfigServerClient(r.BaseURL)
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		// 应用Pipeline配置
+		if err := agentClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
+			lastErr = err
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// 如果指定了AgentGroup，更新AgentGroup配置
+		if pipeline.Spec.AgentGroup != "" {
+			if err := agentClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+				lastErr = err
+				time.Sleep(retryDelay)
+				continue
+			}
+		}
+		return nil
+	}
+	return lastErr
+}
+
+func (r *PipelineReconciler) updateStatusFailure(ctx context.Context, pipeline *v1alpha1.Pipeline, msg string, err error) (ctrl.Result, error) {
+	pipeline.Status.Success = false
+	pipeline.Status.Message = msg
+	r.Event.Event(pipeline, corev1.EventTypeWarning, msg, err.Error())
+	pipeline.Status.LastUpdateTime = metav1.Now()
+	_ = r.Status().Update(ctx, pipeline)
+	return ctrl.Result{}, err
 }
 
 // getConfigServerURL gets the ConfigServer URL from ConfigMap
@@ -218,27 +233,15 @@ func (r *PipelineReconciler) getConfigServerURL(ctx context.Context) error {
 func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	log := r.Log.WithValues("pipeline", pipeline.Name)
 
-	agentClient := configserver.NewAgentClient(r.BaseURL)
-	if err := agentClient.DeletePipelineToAgent(ctx, pipeline); err != nil {
-		log.Error(err, "Failed to delete pipeline from config server")
-		return err
-	}
-
-	// If agent group is specified, remove the pipeline from the group
+	// 如果指定了AgentGroup，从AgentGroup中移除Pipeline
 	if pipeline.Spec.AgentGroup != "" {
+		agentClient := configserver.NewConfigServerClient(r.BaseURL)
 		if err := agentClient.RemoveConfigFromAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
 			log.Error(err, "Failed to remove pipeline from agent group")
 			return err
 		}
 	}
 
-	log.Info("Successfully cleaned up pipeline")
+	log.Info("Successfully cleaned up pipeline from agent")
 	return nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Pipeline{}).
-		Complete(r)
 }

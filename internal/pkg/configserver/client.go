@@ -10,13 +10,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AgentClient represents a config server client
-type AgentClient struct {
+// ConfigServerClient represents a config server client
+type ConfigServerClient struct {
 	client *resty.Client
 }
 
-// NewAgentClient creates a new config server client
-func NewAgentClient(baseURL string) *AgentClient {
+// NewConfigServerClient creates a new config server client
+func NewConfigServerClient(baseURL string) *ConfigServerClient {
 	client := resty.New().
 		SetBaseURL(baseURL).
 		SetTimeout(10*time.Second).
@@ -25,13 +25,13 @@ func NewAgentClient(baseURL string) *AgentClient {
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second)
 
-	return &AgentClient{
+	return &ConfigServerClient{
 		client: client,
 	}
 }
 
 // ApplyPipelineToAgent applies a pipeline configuration to the agent
-func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
+func (a *ConfigServerClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	var config map[string]interface{}
 	if err := yaml.Unmarshal([]byte(pipeline.Spec.Content), &config); err != nil {
 		return fmt.Errorf("failed to parse YAML config: %v", err)
@@ -72,7 +72,7 @@ func (a *AgentClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alph
 }
 
 // DeletePipelineToAgent 从Config-Server删除Pipeline配置
-func (a *AgentClient) DeletePipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
+func (a *ConfigServerClient) DeletePipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	resp, err := a.client.R().
 		SetContext(ctx).
 		Delete(fmt.Sprintf("/User/DeleteConfig/%s", pipeline.Spec.Name))
@@ -96,7 +96,7 @@ type AgentGroup struct {
 }
 
 // CreateAgentGroup creates a new agent group
-func (a *AgentClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) error {
+func (a *ConfigServerClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) error {
 	var response struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -124,7 +124,7 @@ func (a *AgentClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) e
 }
 
 // UpdateAgentGroup updates an existing agent group
-func (a *AgentClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) error {
+func (a *ConfigServerClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) error {
 	var response struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -152,7 +152,7 @@ func (a *AgentClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) e
 }
 
 // DeleteAgentGroup deletes an agent group
-func (a *AgentClient) DeleteAgentGroup(ctx context.Context, groupName string) error {
+func (a *ConfigServerClient) DeleteAgentGroup(ctx context.Context, groupName string) error {
 	resp, err := a.client.R().
 		SetContext(ctx).
 		Delete(fmt.Sprintf("/User/DeleteAgentGroup/%s", groupName))
@@ -169,7 +169,7 @@ func (a *AgentClient) DeleteAgentGroup(ctx context.Context, groupName string) er
 }
 
 // ApplyConfigToAgentGroup applies a config to an agent group
-func (a *AgentClient) ApplyConfigToAgentGroup(ctx context.Context, configName, groupName string) error {
+func (a *ConfigServerClient) ApplyConfigToAgentGroup(ctx context.Context, configName, groupName string) error {
 	payload := map[string]string{
 		"config_name": configName,
 		"group_name":  groupName,
@@ -202,7 +202,7 @@ func (a *AgentClient) ApplyConfigToAgentGroup(ctx context.Context, configName, g
 }
 
 // RemoveConfigFromAgentGroup removes a config from an agent group
-func (a *AgentClient) RemoveConfigFromAgentGroup(ctx context.Context, configName, groupName string) error {
+func (a *ConfigServerClient) RemoveConfigFromAgentGroup(ctx context.Context, configName, groupName string) error {
 	resp, err := a.client.R().
 		SetContext(ctx).
 		Delete(fmt.Sprintf("/User/RemoveConfigFromAgentGroup/%s/%s", configName, groupName))
@@ -219,7 +219,7 @@ func (a *AgentClient) RemoveConfigFromAgentGroup(ctx context.Context, configName
 }
 
 // ListAgentGroups lists all agent groups
-func (a *AgentClient) ListAgentGroups(ctx context.Context) ([]AgentGroup, error) {
+func (a *ConfigServerClient) ListAgentGroups(ctx context.Context) ([]AgentGroup, error) {
 	var response struct {
 		Code    int          `json:"code"`
 		Message string       `json:"message"`

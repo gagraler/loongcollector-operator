@@ -5,6 +5,7 @@
 domain: co.infraflow
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 projectName: loongcollector-operator
 repo: github.com/infraflows/loongcollector-operator
 resources:
