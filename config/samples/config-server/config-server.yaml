@@ -126,7 +126,7 @@ items:
         spec:
           containers:
             - name: config-server
-              image: config-server:openSource
+              image: ghcr.io/ilogtail/config-server:latest
               ports:
                 - containerPort: 9090
               volumeMounts:
@@ -178,7 +178,7 @@ items:
         spec:
           containers:
           - name: config-server-ui
-            image: config-server-ui:openSource
+            image: ghcr.io/ilogtail/config-server:latest
             ports:
             - containerPort: 8080
             env:
