@@ -2,10 +2,9 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: co.infraflow
+domain: infraflow.co
 layout:
 - go.kubebuilder.io/v4
-multigroup: true
 projectName: loongcollector-operator
 repo: github.com/infraflows/loongcollector-operator
 resources:
@@ -13,7 +12,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: co.infraflow
+  domain: infraflow.co
   group: infraflow
   kind: Pipeline
   path: github.com/infraflows/loongcollector-operator/api/v1alpha1
@@ -22,9 +21,18 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: co.infraflow
+  domain: infraflow.co
   group: infraflow
   kind: AgentGroup
+  path: github.com/infraflows/loongcollector-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: infraflow.co
+  group: infraflow
+  kind: LoongCollector
   path: github.com/infraflows/loongcollector-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

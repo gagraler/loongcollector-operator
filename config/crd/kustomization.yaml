@@ -4,6 +4,7 @@
 resources:
 - bases/loongcollector.infraflow.co_pipelines.yaml
 - bases/loongcollector.infraflow.co_agentgroups.yaml
+- bases/infraflow.infraflow.co_loongcollectors.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

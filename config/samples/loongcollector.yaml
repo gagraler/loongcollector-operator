@@ -3,12 +3,12 @@ kind: List
 
 items:
   - apiVersion: apps/v1
-    kind: DaemonSet
+    kind: LoongCollector
     metadata:
       name: loongcollector-agent
       namespace: loongcollector-system
       labels:
-        k8s-app: loongcollector-agent
+        app: loongcollector-agent
     spec:
       selector:
         matchLabels:

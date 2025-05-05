@@ -1,0 +1,89 @@
+apiVersion: loongcollector.loong.io/v1alpha1
+kind: LoongCollector
+metadata:
+  name: loongcollector-sample
+  namespace: loongcollector
+  labels:
+    app: loongcollector
+spec:
+  image: sls-opensource-registry.cn-shanghai.cr.aliyuncs.com/loongcollector-community-edition/loongcollector:latest
+  imagePullPolicy: IfNotPresent
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 400m
+      memory: 384Mi
+  env:
+    - name: ALIYUN_LOG_ENV_TAGS
+      value: _node_name_|_node_ip_
+    - name: _node_name_
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: spec.nodeName
+    - name: _node_ip_
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.hostIP
+    - name: cpu_usage_limit
+      value: "1"
+    - name: mem_usage_limit
+      value: "512"
+    - name: default_access_key_id
+      valueFrom:
+        secretKeyRef:
+          name: loongcollector-secret
+          key: access_key_id
+          optional: true
+    - name: default_access_key
+      valueFrom:
+        secretKeyRef:
+          name: loongcollector-secret
+          key: access_key
+          optional: true
+  volumeMounts:
+    - mountPath: /var/run
+      name: run
+    - mountPath: /logtail_host
+      mountPropagation: HostToContainer
+      name: root
+      readOnly: true
+    - mountPath: /usr/local/loongcollector/data
+      name: checkpoint
+  volumes:
+    - name: run
+      hostPath:
+        path: /var/run
+        type: Directory
+    - name: root
+      hostPath:
+        path: /
+        type: Directory
+    - name: checkpoint
+      hostPath:
+        path: /etc/loongcollector-loongcollector-ds/checkpoint
+        type: DirectoryOrCreate
+  tolerations:
+    - operator: Exists
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - /usr/local/loongcollector/loongcollector_control.sh
+          - stop
+          - "3"
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /liveness
+      port: 7953
+      scheme: HTTP
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1

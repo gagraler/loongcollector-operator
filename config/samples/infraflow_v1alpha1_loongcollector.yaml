@@ -1,0 +1,9 @@
+apiVersion: infraflow.infraflow.co/v1alpha1
+kind: LoongCollector
+metadata:
+  labels:
+    app.kubernetes.io/name: loongcollector-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: loongcollector-sample
+spec:
+  # TODO(user): Add fields here

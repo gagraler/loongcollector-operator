@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- loongcollector_admin_role.yaml
+- loongcollector_editor_role.yaml
+- loongcollector_viewer_role.yaml
 - agentgroup_admin_role.yaml
 - agentgroup_editor_role.yaml
 - agentgroup_viewer_role.yaml

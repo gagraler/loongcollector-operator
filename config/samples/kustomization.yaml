@@ -2,4 +2,5 @@
 resources:
 - infraflow_v1_pipeline.yaml
 - infraflow_v1alpha1_agentgroup.yaml
+- infraflow_v1alpha1_loongcollector.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
