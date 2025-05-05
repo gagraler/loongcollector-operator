@@ -1,6 +1,6 @@
 # LoongCollector Operator
 
-LoongCollector Operator 是一个 Kubernetes Operator，用于管理 iLogtail 的 Pipeline 配置。它通过监听 Pipeline CRD 的变化，自动将配置应用到 iLogtail Agent。
+LoongCollector Operator 用于管理和交付具有 Config-Server 集成的 LoongCollector Pipelines
 
 ## 架构
 
@@ -8,8 +8,8 @@ LoongCollector Operator 是一个 Kubernetes Operator，用于管理 iLogtail �
 
 ## 功能特性
 
-- 支持通过 Kubernetes CRD 管理 iLogtail Pipeline 配置
-- 自动将 Pipeline 配置同步到 iLogtail Agent
+- 支持通过 Kubernetes CRD 管理 LoongCollector Pipeline 配置
+- 自动将 Pipeline 配置同步到 LoongCollector Config-Server
 - 支持配置验证和错误处理
 - 支持配置重试机制
 - 支持优雅删除和资源清理
@@ -20,27 +20,29 @@ LoongCollector Operator 是一个 Kubernetes Operator，用于管理 iLogtail �
 ### 前提条件
 
 - Kubernetes 集群 1.16+
-- iLogtail 已部署并运行
+- LoongCollector 已部署并运行
+  - LoongCollector 部署请参考 [LoongCollector 部署文档](https://ilogtail.gitbook.io/ilogtail-docs/installation/start-with-k8s)，也可也可在kubernetes集群中[快速部署](config/samples/loongcollector.yaml)
 - Config-Server 已部署并运行
 
-### 部署 Operator
+  - Config-Server 部署请参考 [Config-Server 部署文档](https://github.com/iLogtail/ConfigServer)，也可在kubernetes集群中[快速部署](config/samples/config-server/config-server.yaml)
 
-1. 安装 CRD：
+### 快速开始
 
+- 安装 Operator
 ```bash
-kubectl apply -f config/crd/bases/infraflow_v1_pipelines.yaml
+kubectl apply -f https://raw.githubusercontent.com/apiVersion: infraflow.co/v1alpha1/loongcollector-operator/main/install.yaml
 ```
 
-2. 部署 Operator：
+- 部署 Config-Server（可选）：
 
 ```bash
-kubectl apply -f config/manager/manager.yaml
+kubectl apply -f https://raw.githubusercontent.com/apiVersion: infraflow.co/v1alpha1/loongcollector-operator/main/config/config-server/config-server.yaml
 ```
 
-3. 创建 Config-Server 配置（可选）：
+- 部署 LoongCollector（可选）：
 
 ```bash
-kubectl apply -f config/samples/config-server-config.yaml
+kubectl apply -f https://raw.githubusercontent.com/apiVersion: infraflow.co/v1alpha1/loongcollector-operator/main/config/samples/loongcollector.yaml
 ```
 
 ## 使用
@@ -50,6 +52,7 @@ kubectl apply -f config/samples/config-server-config.yaml
 创建一个示例 Pipeline：
 
 ```yaml
+cat <<EOF | kubectl apply -f -
 apiVersion: infraflow.co/v1alpha1
 kind: Pipeline
 metadata:
@@ -57,6 +60,8 @@ metadata:
 spec:
   name: sample-pipeline
   content: |
+    tags:
+      - default
     inputs:
       - type: file
         path: /var/log/containers/*.log
@@ -66,26 +71,30 @@ spec:
           - message
     outputs:
       - type: stdout
+EOF
+
+kubectl apply -f pipeline.yaml
 ```
 
-应用配置：
+或者使用以下命令：
 
 ```bash
-kubectl apply -f config/samples/pipeline.yaml
+kubectl apply -f https://raw.githubusercontent.com/apiVersion: infraflow.co/v1alpha1/loongcollector-operator/main/config/samples/infraflow_v1alpha1_pipeline.yaml
 ```
 
 ### 配置说明
 
 #### Pipeline CRD
 
-Pipeline CRD 定义了以下字段：
+Pipeline CRD 字段说明：
 
 - `spec.name`: Pipeline 名称
 - `spec.content`: Pipeline 配置（YAML 格式）
 
+更多 Pipeline CRD 字段说明请参考 [Pipeline CRD 文档](docs/pipeline-fields.md)
 #### Config-Server 配置
 
-可以通过 ConfigMap 配置 Config-Server 地址：
+默认情况下，Config-Server 服务地址是 `http://config-server:9090` ，也可以通过 ConfigMap 配置 Config-Server 地址：
 
 ```yaml
 apiVersion: v1alpha1
@@ -93,9 +102,15 @@ kind: ConfigMap
 metadata:
   name: config-server-config
   namespace: loongcollector-system
+  labels:
+    app: config-server
 data:
-  configServerURL: "http://config-server:8899"  # 默认值
+  configServerURL: "http://config-server:9090"
 ```
+> Tips：
+>- operator获取Config-Server优先级为 **默认地址 `http://config-server:9090`** > **ConfigMap**，获取ConfigMap的方式是通过lable获取，值为`app: config-server`，暂不支持修改
+>- 如果Config-Server地址发生变化，需要手动更新ConfigMap，并重启operator
+>   - `kubectl rollout restart deployment -n loongcollector-system loongcollector-operator` 重启operator
 
 ## 开发
 
@@ -119,20 +134,10 @@ make test
 make docker-build
 ```
 
-### 项目结构
+4. 生成安装文件：
 
-```
-.
-├── api/                    # API 定义
-│   └── v1/                # v1 API
-├── config/                # 配置文件
-│   ├── crd/              # CRD 定义
-│   ├── manager/          # 管理器配置
-│   └── samples/          # 示例配置
-├── internal/            # 内部包
-│   ├── controller/      # 控制器实现
-│   └── pkg/            # 工具包
-└── main.go             # 入口文件
+```bash
+make build-installer
 ```
 
 ## 许可证
