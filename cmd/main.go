@@ -29,7 +29,6 @@ import (
 	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
 	"github.com/infraflows/loongcollector-operator/internal/controller"
 
-	infraflowv1alpha1 "github.com/infraflows/loongcollector-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -51,7 +50,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
-	utilruntime.Must(infraflowv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

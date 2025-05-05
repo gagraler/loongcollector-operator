@@ -7,16 +7,20 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
-	"gopkg.in/yaml.v3"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ConfigServerClient represents a config server client
 type ConfigServerClient struct {
-	client *resty.Client
+	client           *resty.Client
+	kubernetesClient *client.Client
+	namespace        string
 }
 
 // NewConfigServerClient creates a new config server client
-func NewConfigServerClient(baseURL string) *ConfigServerClient {
+func NewConfigServerClient(baseURL string, kubernetesClient *client.Client, namespace string) *ConfigServerClient {
 	client := resty.New().
 		SetBaseURL(baseURL).
 		SetTimeout(10*time.Second).
@@ -26,46 +30,78 @@ func NewConfigServerClient(baseURL string) *ConfigServerClient {
 		SetRetryMaxWaitTime(5 * time.Second)
 
 	return &ConfigServerClient{
-		client: client,
+		client:           client,
+		kubernetesClient: kubernetesClient,
+		namespace:        namespace,
 	}
 }
 
 // ApplyPipelineToAgent applies a pipeline configuration to the agent
+// 获取 loongcollector DaemonSet
+// 为每个 pipeline 创建独立的 volume 和 volumeMount
+// 将配置挂载到 loongcollector 容器的特定目录
+// 1. 每个 pipeline 配置都是独立的
+// 2. 配置变更会触发 pod 重启，确保配置生效
+// 3. 不依赖 ConfigMap 的更新机制
 func (a *ConfigServerClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
-	var config map[string]interface{}
-	if err := yaml.Unmarshal([]byte(pipeline.Spec.Content), &config); err != nil {
-		return fmt.Errorf("failed to parse YAML config: %v", err)
+	daemonSet := &appsv1.DaemonSet{}
+	err := (*a.kubernetesClient).Get(ctx, client.ObjectKey{
+		Namespace: a.namespace,
+		Name:      "loongcollector",
+	}, daemonSet)
+	if err != nil {
+		return fmt.Errorf("failed to get DaemonSet: %v", err)
 	}
 
-	payload := map[string]interface{}{
-		"config_name": pipeline.Spec.Name,
-		"config_detail": map[string]interface{}{
-			"name":    pipeline.Spec.Name,
-			"content": config,
+	configVolume := corev1.Volume{
+		Name: pipeline.Spec.Name,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: pipeline.Spec.Name,
+				},
+			},
 		},
 	}
 
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+	found := false
+	for i, v := range daemonSet.Spec.Template.Spec.Volumes {
+		if v.Name == pipeline.Spec.Name {
+			daemonSet.Spec.Template.Spec.Volumes[i] = configVolume
+			found = true
+			break
+		}
+	}
+	if !found {
+		daemonSet.Spec.Template.Spec.Volumes = append(daemonSet.Spec.Template.Spec.Volumes, configVolume)
 	}
 
-	resp, err := a.client.R().
-		SetContext(ctx).
-		SetBody(payload).
-		SetResult(&response).
-		Post("/User/CreateConfig")
+	volumeMount := corev1.VolumeMount{
+		Name:      pipeline.Spec.Name,
+		MountPath: "/usr/local/loongcollector/conf/instance_config/" + pipeline.Spec.Name,
+		ReadOnly:  true,
+	}
 
+	for i, container := range daemonSet.Spec.Template.Spec.Containers {
+		if container.Name == "loongcollector" {
+			found = false
+			for j, vm := range container.VolumeMounts {
+				if vm.Name == pipeline.Spec.Name {
+					daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts[j] = volumeMount
+					found = true
+					break
+				}
+			}
+			if !found {
+				daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts, volumeMount)
+			}
+			break
+		}
+	}
+
+	err = (*a.kubernetesClient).Update(ctx, daemonSet)
 	if err != nil {
-		return fmt.Errorf("failed to send request to configserver: %v", err)
-	}
-
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	if response.Code != 200 {
-		return fmt.Errorf("configserver returned error: %s", response.Message)
+		return fmt.Errorf("failed to update DaemonSet: %v", err)
 	}
 
 	return nil

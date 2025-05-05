@@ -112,7 +112,6 @@ func (r *PipelineReconciler) handlePipelineCreateOrUpdate(ctx context.Context, p
 		return ctrl.Result{}, err
 	}
 
-	// 检查是否需要更新
 	if !r.shouldUpdatePipeline(ctx, pipeline) {
 		r.Log.V(1).Info("Pipeline content unchanged, skipping update", "pipeline", pipeline.Name)
 		return ctrl.Result{RequeueAfter: syncInterval}, nil
@@ -138,31 +137,26 @@ func (r *PipelineReconciler) handlePipelineCreateOrUpdate(ctx context.Context, p
 
 // shouldUpdatePipeline 检查Pipeline是否需要更新
 func (r *PipelineReconciler) shouldUpdatePipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) bool {
-	// 如果是新创建的Pipeline，需要更新
 	if pipeline.Status.LastAppliedConfig.Content == "" {
 		return true
 	}
 
-	// 检查关键字段是否有变化
 	if pipeline.Spec.Content != pipeline.Status.LastAppliedConfig.Content {
 		return true
 	}
 
-	// 检查AgentGroup是否有变化
 	if pipeline.Spec.AgentGroup != "" {
 		// 获取当前AgentGroup的配置
-		agentClient := configserver.NewConfigServerClient(r.BaseURL)
-		groups, err := agentClient.ListAgentGroups(ctx)
+		configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
+		groups, err := configServerClient.ListAgentGroups(ctx)
 		if err != nil {
 			r.Log.Error(err, "Failed to list agent groups, assuming update needed", "pipeline", pipeline.Name)
 			return true
 		}
 
-		// 检查Pipeline是否在当前AgentGroup中
 		for _, group := range groups {
 			if group.Name == pipeline.Spec.AgentGroup {
-				// TODO: 这里需要添加检查Pipeline是否在group中的逻辑
-				// 暂时假设需要更新
+				// TODO: 这里需要检查Pipeline是否在group中的逻辑
 				return true
 			}
 		}
@@ -177,11 +171,10 @@ func (r *PipelineReconciler) applyPipelineToAgent(ctx context.Context, pipeline 
 		return err
 	}
 
-	agentClient := configserver.NewConfigServerClient(r.BaseURL)
+	configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
-		// 应用Pipeline配置
-		if err := agentClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
+		if err := configServerClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
 			lastErr = err
 			time.Sleep(retryDelay)
 			continue
@@ -189,7 +182,7 @@ func (r *PipelineReconciler) applyPipelineToAgent(ctx context.Context, pipeline 
 
 		// 如果指定了AgentGroup，更新AgentGroup配置
 		if pipeline.Spec.AgentGroup != "" {
-			if err := agentClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+			if err := configServerClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
 				lastErr = err
 				time.Sleep(retryDelay)
 				continue
@@ -235,8 +228,8 @@ func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1al
 
 	// 如果指定了AgentGroup，从AgentGroup中移除Pipeline
 	if pipeline.Spec.AgentGroup != "" {
-		agentClient := configserver.NewConfigServerClient(r.BaseURL)
-		if err := agentClient.RemoveConfigFromAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+		configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
+		if err := configServerClient.RemoveConfigFromAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
 			log.Error(err, "Failed to remove pipeline from agent group")
 			return err
 		}
