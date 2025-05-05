@@ -73,16 +73,15 @@ EOF
 
 kubectl apply -f pipeline.yaml
 ```
+或者使用以下命令：
+```bash
+kubectl apply -f https://github.com/infraflows/loongcollector-operator/blob/main/config/samples/infraflow_v1alpha1_pipeline.yaml
+```
+
 - 创建 AgentGroup
 
 ```bash
-kubectl apply -f https://github.com/infraflows/loongcollector-operator/blob/main/config/samples/infraflow_v1alpha1_agentgroup.yaml
-```
-
-或者使用以下命令：
-
-```bash
-kubectl apply -f https://github.com/infraflows/loongcollector-operator/blob/main/config/samples/infraflow_v1alpha1_pipeline.yaml
+kubectl apply -f https://github.com/infraflows/loongcollector-operator/blob/main/config/samples/agentgroup.yaml
 ```
 
 ### 配置说明
