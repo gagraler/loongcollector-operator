@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/infraflows/loongcollector-operator/internal/emus"
-	"github.com/infraflows/loongcollector-operator/internal/pkg/agent"
 	"github.com/infraflows/loongcollector-operator/internal/pkg/configserver"
 	"github.com/infraflows/loongcollector-operator/internal/pkg/kube"
 
@@ -118,7 +117,7 @@ func (r *PipelineReconciler) handlePipelineCreateOrUpdate(ctx context.Context, p
 		return ctrl.Result{RequeueAfter: syncInterval}, nil
 	}
 
-	if err := agent.ApplyPipelineToAgent(ctx, pipeline, r.Client); err != nil {
+	if err := r.applyPipeline(ctx, pipeline); err != nil {
 		return r.updateStatusFailure(ctx, pipeline, emus.PipelineStatusFailed, err)
 	}
 
@@ -166,33 +165,33 @@ func (r *PipelineReconciler) shouldUpdatePipeline(ctx context.Context, pipeline 
 	return false
 }
 
-// applyPipelineToAgent 应用Pipeline配置到Agent
-// func (r *PipelineReconciler) applyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
-// 	if err := r.getConfigServerURL(ctx); err != nil {
-// 		return err
-// 	}
+// applyPipeline 应用Pipeline配置到Agent
+func (r *PipelineReconciler) applyPipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
+	if err := r.getConfigServerURL(ctx); err != nil {
+		return err
+	}
 
-// 	configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
-// 	var lastErr error
-// 	for i := 0; i < maxRetries; i++ {
-// 		if err := configServerClient.ApplyPipelineToAgent(ctx, pipeline); err != nil {
-// 			lastErr = err
-// 			time.Sleep(retryDelay)
-// 			continue
-// 		}
+	configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if err := configServerClient.CreateConfig(ctx, pipeline); err != nil {
+			lastErr = err
+			time.Sleep(retryDelay)
+			continue
+		}
 
-// 		// 如果指定了AgentGroup，更新AgentGroup配置
-// 		if pipeline.Spec.AgentGroup != "" {
-// 			if err := configServerClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
-// 				lastErr = err
-// 				time.Sleep(retryDelay)
-// 				continue
-// 			}
-// 		}
-// 		return nil
-// 	}
-// 	return lastErr
-// }
+		// 如果指定了AgentGroup，更新AgentGroup配置
+		if pipeline.Spec.AgentGroup != "" {
+			if err := configServerClient.ApplyConfigToAgentGroup(ctx, pipeline.Spec.Name, pipeline.Spec.AgentGroup); err != nil {
+				lastErr = err
+				time.Sleep(retryDelay)
+				continue
+			}
+		}
+		return nil
+	}
+	return lastErr
+}
 
 func (r *PipelineReconciler) updateStatusFailure(ctx context.Context, pipeline *v1alpha1.Pipeline, msg string, err error) (ctrl.Result, error) {
 	pipeline.Status.Success = false
@@ -204,24 +203,22 @@ func (r *PipelineReconciler) updateStatusFailure(ctx context.Context, pipeline *
 }
 
 // getConfigServerURL gets the ConfigServer URL from ConfigMap
-// func (r *PipelineReconciler) getConfigServerURL(ctx context.Context) error {
-// 	configMap := &corev1.ConfigMap{}
-// 	err := r.Get(ctx, client.ObjectKey{Namespace: configMapNamespace, Name: configMapName}, configMap)
-// 	if err != nil {
-// 		if errors.IsNotFound(err) {
-// 			r.BaseURL = defaultBaseURL
-// 			return nil
-// 		}
-// 		return err
-// 	}
+func (r *PipelineReconciler) getConfigServerURL(ctx context.Context) error {
+	configMap, err := kube.GetConfigMapByLabel(ctx, r.Client, configMapName, 
+		configMapNamespace, map[string]string{
+		"app": "config-server",
+	})
+	if err != nil {
+		return err
+	}
 
-// 	if url, ok := configMap.Data[configMapKey]; ok && url != "" {
-// 		r.BaseURL = url
-// 	} else {
-// 		r.BaseURL = defaultBaseURL
-// 	}
-// 	return nil
-// }
+	if url, ok := configMap.Data[configMapKey]; ok && url != "" {
+		r.BaseURL = url
+	} else {
+		r.BaseURL = defaultBaseURL
+	}
+	return nil
+}
 
 // cleanupPipeline 清理Pipeline相关的资源
 func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
@@ -236,7 +233,8 @@ func (r *PipelineReconciler) cleanupPipeline(ctx context.Context, pipeline *v1al
 		}
 	}
 
-	if err := agent.DeletePipelineToAgent(ctx, pipeline, r.Client); err != nil {
+	configServerClient := configserver.NewConfigServerClient(r.BaseURL, &r.Client, pipeline.Namespace)
+	if err := configServerClient.DeleteConfig(ctx, pipeline.Spec.Name); err != nil {
 		log.Error(err, "Failed to delete pipeline from agent")
 		return err
 	}

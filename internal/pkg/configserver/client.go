@@ -7,16 +7,14 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/infraflows/loongcollector-operator/api/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
+	"gopkg.in/yaml.v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ConfigServerClient represents a config server client
 type ConfigServerClient struct {
-	client           *resty.Client
-	kubernetesClient *client.Client
-	namespace        string
+	client    *resty.Client
+	namespace string
 }
 
 // NewConfigServerClient creates a new config server client
@@ -30,119 +28,33 @@ func NewConfigServerClient(baseURL string, kubernetesClient *client.Client, name
 		SetRetryMaxWaitTime(5 * time.Second)
 
 	return &ConfigServerClient{
-		client:           client,
-		kubernetesClient: kubernetesClient,
-		namespace:        namespace,
+		client:    client,
+		namespace: namespace,
 	}
 }
 
-// ApplyPipelineToAgent applies a pipeline configuration to the agent
-// 获取 loongcollector DaemonSet
-// 为每个 pipeline 创建独立的 volume 和 volumeMount
-// 将配置挂载到 loongcollector 容器的特定目录
-// 1. 每个 pipeline 配置都是独立的
-// 2. 配置变更会触发 pod 重启，确保配置生效
-// 3. 不依赖 ConfigMap 的更新机制
-func (a *ConfigServerClient) ApplyPipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
-	daemonSet := &appsv1.DaemonSet{}
-	err := (*a.kubernetesClient).Get(ctx, client.ObjectKey{
-		Namespace: a.namespace,
-		Name:      "loongcollector",
-	}, daemonSet)
-	if err != nil {
-		return fmt.Errorf("failed to get DaemonSet: %v", err)
+// CreateConfig 创建配置
+func (a *ConfigServerClient) CreateConfig(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
+	var config map[string]interface{}
+	var response response
+
+	if err := yaml.Unmarshal([]byte(pipeline.Spec.Content), &config); err != nil {
+		return fmt.Errorf("failed to parse YAML config: %v", err)
 	}
 
-	configVolume := corev1.Volume{
-		Name: pipeline.Spec.Name,
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: pipeline.Spec.Name,
-				},
-			},
+	payload := map[string]interface{}{
+		"config_name": pipeline.Spec.Name,
+		"config_detail": map[string]interface{}{
+			"name":    pipeline.Spec.Name,
+			"content": config,
 		},
 	}
 
-	found := false
-	for i, v := range daemonSet.Spec.Template.Spec.Volumes {
-		if v.Name == pipeline.Spec.Name {
-			daemonSet.Spec.Template.Spec.Volumes[i] = configVolume
-			found = true
-			break
-		}
-	}
-	if !found {
-		daemonSet.Spec.Template.Spec.Volumes = append(daemonSet.Spec.Template.Spec.Volumes, configVolume)
-	}
-
-	volumeMount := corev1.VolumeMount{
-		Name:      pipeline.Spec.Name,
-		MountPath: "/usr/local/loongcollector/conf/instance_config/" + pipeline.Spec.Name,
-		ReadOnly:  true,
-	}
-
-	for i, container := range daemonSet.Spec.Template.Spec.Containers {
-		if container.Name == "loongcollector" {
-			found = false
-			for j, vm := range container.VolumeMounts {
-				if vm.Name == pipeline.Spec.Name {
-					daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts[j] = volumeMount
-					found = true
-					break
-				}
-			}
-			if !found {
-				daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonSet.Spec.Template.Spec.Containers[i].VolumeMounts, volumeMount)
-			}
-			break
-		}
-	}
-
-	err = (*a.kubernetesClient).Update(ctx, daemonSet)
-	if err != nil {
-		return fmt.Errorf("failed to update DaemonSet: %v", err)
-	}
-
-	return nil
-}
-
-// DeletePipelineToAgent 从Config-Server删除Pipeline配置
-func (a *ConfigServerClient) DeletePipelineToAgent(ctx context.Context, pipeline *v1alpha1.Pipeline) error {
 	resp, err := a.client.R().
 		SetContext(ctx).
-		Delete(fmt.Sprintf("/User/DeleteConfig/%s", pipeline.Spec.Name))
-
-	if err != nil {
-		return fmt.Errorf("failed to send delete request to configserver: %v", err)
-	}
-
-	if resp.StatusCode() != 200 && resp.StatusCode() != 404 {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
-}
-
-// AgentGroup represents an agent group
-type AgentGroup struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-}
-
-// CreateAgentGroup creates a new agent group
-func (a *ConfigServerClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) error {
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-
-	resp, err := a.client.R().
-		SetContext(ctx).
-		SetBody(group).
+		SetBody(payload).
 		SetResult(&response).
-		Post("/User/CreateAgentGroup")
+		Post("/User/CreateConfig")
 
 	if err != nil {
 		return fmt.Errorf("failed to send request to configserver: %v", err)
@@ -159,14 +71,48 @@ func (a *ConfigServerClient) CreateAgentGroup(ctx context.Context, group *AgentG
 	return nil
 }
 
-// UpdateAgentGroup updates an existing agent group
-func (a *ConfigServerClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) error {
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+// DeleteConfig 从Config-Server删除配置
+func (a *ConfigServerClient) DeleteConfig(ctx context.Context, configName string) error {
+	resp, err := a.client.R().
+		SetContext(ctx).
+		Delete(fmt.Sprintf("/User/DeleteConfig/%s", configName))
+
+	if err != nil {
+		return fmt.Errorf("failed to send delete request to configserver: %v", err)
 	}
 
-	resp, err := a.client.R().
+	if resp.StatusCode() != 200 && resp.StatusCode() != 404 {
+		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// CreateAgentGroup creates a new agent group
+func (a *ConfigServerClient) CreateAgentGroup(ctx context.Context, group *AgentGroup) error {
+	var response response
+	_, err := a.client.R().
+		SetContext(ctx).
+		SetBody(group).
+		SetResult(&response).
+		Post("/User/CreateAgentGroup")
+
+	if err != nil {
+		return fmt.Errorf("failed to send request to configserver: %v", err)
+	}
+
+	if response.Code != 200 || response.Message != "ACCEPT" {
+		return fmt.Errorf("configserver returned error: %s", response.Message)
+	}
+
+	return nil
+}
+
+// UpdateAgentGroup updates an existing agent group
+func (a *ConfigServerClient) UpdateAgentGroup(ctx context.Context, group *AgentGroup) error {
+	var response response
+
+	_, err := a.client.R().
 		SetContext(ctx).
 		SetBody(group).
 		SetResult(&response).
@@ -176,11 +122,7 @@ func (a *ConfigServerClient) UpdateAgentGroup(ctx context.Context, group *AgentG
 		return fmt.Errorf("failed to send request to configserver: %v", err)
 	}
 
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	if response.Code != 200 {
+	if response.Code != 200 || response.Message != "ACCEPT" {
 		return fmt.Errorf("configserver returned error: %s", response.Message)
 	}
 
@@ -204,19 +146,15 @@ func (a *ConfigServerClient) DeleteAgentGroup(ctx context.Context, groupName str
 	return nil
 }
 
-// ApplyConfigToAgentGroup applies a config to an agent group
+// ApplyConfigToAgentGroup 将配置应用到Agent组
 func (a *ConfigServerClient) ApplyConfigToAgentGroup(ctx context.Context, configName, groupName string) error {
+	var response response
 	payload := map[string]string{
 		"config_name": configName,
 		"group_name":  groupName,
 	}
 
-	var response struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-
-	resp, err := a.client.R().
+	_, err := a.client.R().
 		SetContext(ctx).
 		SetBody(payload).
 		SetResult(&response).
@@ -226,18 +164,14 @@ func (a *ConfigServerClient) ApplyConfigToAgentGroup(ctx context.Context, config
 		return fmt.Errorf("failed to send request to configserver: %v", err)
 	}
 
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	if response.Code != 200 {
+	if response.Code != 200 || response.Message != "ACCEPT" {
 		return fmt.Errorf("configserver returned error: %s", response.Message)
 	}
 
 	return nil
 }
 
-// RemoveConfigFromAgentGroup removes a config from an agent group
+// RemoveConfigFromAgentGroup 从Agent组中移除配置
 func (a *ConfigServerClient) RemoveConfigFromAgentGroup(ctx context.Context, configName, groupName string) error {
 	resp, err := a.client.R().
 		SetContext(ctx).
@@ -254,15 +188,15 @@ func (a *ConfigServerClient) RemoveConfigFromAgentGroup(ctx context.Context, con
 	return nil
 }
 
-// ListAgentGroups lists all agent groups
+// ListAgentGroups 列出所有Agent组
 func (a *ConfigServerClient) ListAgentGroups(ctx context.Context) ([]AgentGroup, error) {
 	var response struct {
-		Code    int          `json:"code"`
-		Message string       `json:"message"`
-		Data    []AgentGroup `json:"data"`
+		Code       int          `json:"code"`
+		Message    string       `json:"message"`
+		AgentGroup []AgentGroup `json:"data"`
 	}
 
-	resp, err := a.client.R().
+	_, err := a.client.R().
 		SetContext(ctx).
 		SetResult(&response).
 		Get("/User/ListAgentGroups")
@@ -271,13 +205,9 @@ func (a *ConfigServerClient) ListAgentGroups(ctx context.Context) ([]AgentGroup,
 		return nil, fmt.Errorf("failed to send request to configserver: %v", err)
 	}
 
-	if resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("configserver returned status %d: %s", resp.StatusCode(), resp.String())
-	}
-
 	if response.Code != 200 {
 		return nil, fmt.Errorf("configserver returned error: %s", response.Message)
 	}
 
-	return response.Data, nil
+	return response.AgentGroup, nil
 }

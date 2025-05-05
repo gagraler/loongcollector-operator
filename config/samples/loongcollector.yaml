@@ -115,6 +115,9 @@ items:
     metadata:
       name: config-server-config
       namespace: loongcollector-system
+      # 这里需要添加label，用于正确获取config-server的cm
+      labels:
+        app: config-server
     data:
       configServerURL: "http://config-server:9090"
 
